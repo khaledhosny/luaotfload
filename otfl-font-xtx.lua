@@ -9,6 +9,7 @@ if not modules then modules = { } end modules ['font-xtx'] = {
 local texsprint, count = tex.sprint, tex.count
 local format, concat, gmatch, match, find, lower = string.format, table.concat, string.gmatch, string.match, string.find, string.lower
 local tostring, next = tostring, next
+local lpegmatch = lpeg.match
 
 local trace_defining = false  trackers.register("fonts.defining", function(v) trace_defining = v end)
 
@@ -61,25 +62,129 @@ local list = { }
 
 fonts.define.specify.colonized_default_lookup = "file"
 
+local function isstyle(s)
+    local style  = string.lower(s):split("/")
+    for _,v in ipairs(style) do
+        if v == "b" then
+            list.style = "bold"
+        elseif v == "i" then
+            list.style = "italic"
+        elseif v == "bi" or v == "ib" then
+            list.style = "bolditalic"
+        elseif v:find("^s=") then
+            list.optsize = v:split("=")[2]
+        elseif v == "aat" or v == "icu" or v == "gr" then
+            logs.report("define font", "unsupported font option: %s", v)
+        elseif not v:is_empty() then
+            list.style = v:gsub("[^%a%d]", "")
+        end
+    end
+end
+
+fonts      = fonts      or { }
+fonts.otf  = fonts.otf  or { }
+
+local otf  = fonts.otf
+
+otf.tables = otf.tables or { }
+
+otf.tables.defaults = {
+    dflt = {
+        "ccmp", "locl", "rlig", "liga", "clig",
+        "kern", "mark", "mkmk",
+    },
+    arab = {
+        "ccmp", "locl", "isol", "fina", "fin2",
+        "fin3", "medi", "med2", "init", "rlig",
+        "calt", "liga", "cswh", "mset", "curs",
+        "kern", "mark", "mkmk",
+    },
+    deva = {
+        "ccmp", "locl", "init", "nukt", "akhn",
+        "rphf", "blwf", "half", "pstf", "vatu",
+        "pres", "blws", "abvs", "psts", "haln",
+        "calt", "blwm", "abvm", "dist", "kern",
+        "mark", "mkmk",
+    },
+    khmr = {
+        "ccmp", "locl", "pref", "blwf", "abvf",
+        "pstf", "pres", "blws", "abvs", "psts",
+        "clig", "calt", "blwm", "abvm", "dist",
+        "kern", "mark", "mkmk",
+    },
+    syrc = {
+        "ccmp", "locl", "isol", "fina", "fin1",
+        "fin2", "medi", "med2", "init", "rlig",
+        "calt", "liga", "kern", "mark", "mkmk",
+    },
+    thai = {
+        "ccmp", "locl", "liga", "kern", "mark",
+        "mkmk",
+    },
+    hang = {
+        "ccmp", "ljmo", "vjmo", "tjmo",
+    },
+}
+
+otf.tables.defaults.beng = otf.tables.defaults.deva
+otf.tables.defaults.guru = otf.tables.defaults.deva
+otf.tables.defaults.gujr = otf.tables.defaults.deva
+otf.tables.defaults.orya = otf.tables.defaults.deva
+otf.tables.defaults.taml = otf.tables.defaults.deva
+otf.tables.defaults.telu = otf.tables.defaults.deva
+otf.tables.defaults.knda = otf.tables.defaults.deva
+otf.tables.defaults.mlym = otf.tables.defaults.deva
+otf.tables.defaults.sinh = otf.tables.defaults.deva
+
+otf.tables.defaults.syrc = otf.tables.defaults.arab
+otf.tables.defaults.mong = otf.tables.defaults.arab
+otf.tables.defaults.nko  = otf.tables.defaults.arab
+
+otf.tables.defaults.tibt = otf.tables.defaults.khmr
+
+otf.tables.defaults.lao  = otf.tables.defaults.thai
+
+local function parse_script(script)
+    if otf.tables.scripts[script] then
+        local dflt
+        if otf.tables.defaults[script] then
+            dflt = otf.tables.defaults[script]
+        else
+            dflt = otf.tables.defaults["dflt"]
+        end
+        for _,v in next, dflt do
+            list[v] = "yes"
+        end
+    end
+end
+
 local function issome ()    list.lookup = fonts.define.specify.colonized_default_lookup end
 local function isfile ()    list.lookup = 'file' end
 local function isname ()    list.lookup = 'name' end
 local function thename(s)   list.name   = s end
 local function issub  (v)   list.sub    = v end
-local function iscrap (s)   list.crap   = string.lower(s) end
 local function istrue (s)   list[s]     = 'yes' end
-local function isfalse(s)   list[s]     = 'no' end
-local function iskey  (k,v) list[k]     = v end
+--KH local function isfalse(s)   list[s]     = 'no' end
+local function isfalse(s)   list[s]     = nil end -- see mpg/luaotfload#4
+local function iskey  (k,v)
+    if k == "script" then
+        parse_script(v)
+    end
+    list[k] = v
+end
 
 local spaces     = lpeg.P(" ")^0
-local namespec   = (1-lpeg.S("/:("))^0 -- was: (1-lpeg.S("/: ("))^0
-local crapspec   = spaces * lpeg.P("/") * (((1-lpeg.P(":"))^0)/iscrap) * spaces
+-- ER: now accepting names like C:/program files/texlive/2009/...
+local namespec   = (lpeg.R("az", "AZ") * lpeg.P(":"))^-1 * (1-lpeg.S("/:("))^1 -- was: (1-lpeg.S("/: ("))^0
+local crapspec   = spaces * lpeg.P("/") * (((1-lpeg.P(":"))^0)/isstyle) * spaces
+-- ER: can't understand why the 'file:' thing doesn't work with fontnames starting by c:...
 local filename   = (lpeg.P("file:")/isfile * (namespec/thename)) + (lpeg.P("[") * lpeg.P(true)/isname * (((1-lpeg.P("]"))^0)/thename) * lpeg.P("]"))
 local fontname   = (lpeg.P("name:")/isname * (namespec/thename)) + lpeg.P(true)/issome * (namespec/thename)
 local sometext   = (lpeg.R("az") + lpeg.R("AZ") + lpeg.R("09"))^1
 local truevalue  = lpeg.P("+") * spaces * (sometext/istrue)
 local falsevalue = lpeg.P("-") * spaces * (sometext/isfalse)
-local keyvalue   = (lpeg.C(sometext) * spaces * lpeg.P("=") * spaces * lpeg.C(sometext))/iskey
+local someval    = (lpeg.S("+-.") + sometext)^1
+local keyvalue   = (lpeg.C(sometext) * spaces * lpeg.P("=") * spaces * lpeg.C(someval))/iskey
 local somevalue  = sometext/istrue
 local subvalue   = lpeg.P("(") * (lpeg.C(lpeg.P(1-lpeg.S("()"))^1)/issub) * lpeg.P(")") -- for Kim
 local option     = spaces * (keyvalue + falsevalue + truevalue + somevalue) * spaces
@@ -88,14 +193,21 @@ local pattern    = (filename + fontname) * subvalue^0 * crapspec^0 * options^0
 
 function fonts.define.specify.colonized(specification) -- xetex mode
     list = { }
-    pattern:match(specification.specification)
+    lpegmatch(pattern,specification.specification)
     for k, v in next, list do
         list[k] = v:is_boolean()
         if type(list[a]) == "nil" then
             list[k] = v
         end
     end
-    list.crap = nil -- style not supported, maybe some day
+    if list.style then
+        specification.style = list.style
+        list.style = nil
+    end
+    if list.optsize then
+        specification.optsize = list.optsize
+        list.optsize = nil
+    end
     if list.name then
         specification.name = list.name
         list.name = nil
