@@ -34,7 +34,6 @@ Manifest
 
 Source files:
         luaotfload.dtx          single file source & doc for the package
-        luaotfload-fonts.lua    texlua script for font database generation
         otfl-data-con.lua       OTF support files from the ConTeXt distribution
         otfl-font-cid.lua                       .
         otfl-font-def.lua                       .
@@ -57,7 +56,6 @@ Source files:
         otfl-node-ini.lua                       .
         otfl-node-inj.lua                       .
         otfl-node-res.lua       OTF support files from the ConTeXt distribution
-        otfl-node-msc.lua       luaotfload module for additional features
 
 Derived files:
         luaotfload.pdf          documentation
@@ -70,49 +68,36 @@ License
 This work is distributed under the GNU GPLv2 license. Please see COPYING file
 for more details about the license.
 
-The files otfl-*.lua are under the GNU GPLv2 license. Their legal notice
-starts by:
-
+The files otfl-*.lua are under the GNU GPLv2 license. Their legal notice is
+ 
 "
 Copyright 2008 PRAGMA ADE / ConTeXt Development Team
-"
-
-for otf-*.lua files except otfl-font-msc.lua, and
-
-"
-Copyright 2010 Khaled Hosny
-"
-
-for otfl-font-msc.lua, and continues by:
-
-"
+ 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation; either version 2
 of the License, or (at your option) any later version.
-
+ 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
-
+ 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 "
-
-
+ 
 The file luaotfload.dtx and the derived files
   luaotfload.pdf
   luaotfload.sty
   luaotfload.lua
   
-as well as the file luatex-fonts.lua are under the CC0 license. You can find the
-CC0 license full text at
-
+are under the CC0 license. You can find the CC0 license full text at
+ 
 http://creativecommons.org/publicdomain/zero/1.0/legalcode
-
+ 
 and a FAQ at
-
+ 
 http://wiki.creativecommons.org/CC0
 
