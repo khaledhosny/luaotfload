@@ -1,5 +1,8 @@
                         History of the luaotfload bundle
 
+2010/02/22, luaotfload v1.06b:
+    * fix loading OpenType feature files
+
 2010/02/07, luaotfload v1.06a:
     * more complete tlig and trep
     * defaults options changed to "+ccmp;+locl;+rlig;+liga;+clig;+kern;
