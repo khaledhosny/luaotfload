@@ -12,7 +12,8 @@ if context then
 end
 
 local dummyfunction = function() end
-local dummyreporter = function(c) return function(...) texio.write(c .. " : " .. string.format(...)) end end
+----- dummyreporter = function(c) return function(...) texio.write_nl(c .. " : " .. string.format(...)) end end
+local dummyreporter = function(c) return function(...) texio.write_nl(c .. " : " .. string.formatters(...)) end end
 
 statistics = {
     register      = dummyfunction,
@@ -74,32 +75,42 @@ texconfig.kpse_init = true
 resolvers = resolvers or { } -- no fancy file helpers used
 
 local remapper = {
-    otf   = "opentype fonts",
-    ttf   = "truetype fonts",
-    ttc   = "truetype fonts",
-    dfont = "truetype fonts", -- "truetype dictionary",
-    cid   = "cid maps",
-    fea   = "font feature files",
-    pfa   = "type1 fonts", -- this is for Khaled, in ConTeXt we don't use this!
-    pfb   = "type1 fonts", -- this is for Khaled, in ConTeXt we don't use this!
+    otf    = "opentype fonts",
+    ttf    = "truetype fonts",
+    ttc    = "truetype fonts",
+    dfont  = "truetype fonts", -- "truetype dictionary",
+    cid    = "cid maps",
+    cidmap = "cid maps",
+    fea    = "font feature files",
+    pfa    = "type1 fonts", -- this is for Khaled, in ConTeXt we don't use this!
+    pfb    = "type1 fonts", -- this is for Khaled, in ConTeXt we don't use this!
 }
 
 function resolvers.findfile(name,fileformat)
-    name = string.gsub(name,"\\","\/")
-    fileformat = fileformat and string.lower(fileformat)
-    local found = kpse.find_file(name,(fileformat and fileformat ~= "" and (remapper[fileformat] or fileformat)) or file.extname(name,"tex"))
+    name = string.gsub(name,"\\","/")
+    if not fileformat or fileformat == "" then
+        fileformat = file.suffix(name)
+        if fileformat == "" then
+            fileformat = "tex"
+        end
+    end
+    fileformat = string.lower(fileformat)
+    fileformat = remapper[fileformat] or fileformat
+    local found = kpse.find_file(name,fileformat)
     if not found or found == "" then
         found = kpse.find_file(name,"other text files")
     end
     return found
 end
 
-function resolvers.findbinfile(name,fileformat)
-    if not fileformat or fileformat == "" then
-        fileformat = file.extname(name) -- string.match(name,"%.([^%.]-)$")
-    end
-    return resolvers.findfile(name,(fileformat and remapper[fileformat]) or fileformat)
-end
+-- function resolvers.findbinfile(name,fileformat)
+--     if not fileformat or fileformat == "" then
+--         fileformat = file.suffix(name)
+--     end
+--     return resolvers.findfile(name,(fileformat and remapper[fileformat]) or fileformat)
+-- end
+
+resolvers.findbinfile = resolvers.findfile
 
 function resolvers.resolve(s)
     return s
@@ -119,7 +130,9 @@ end
 
 caches = { }
 
-local writable, readables = nil, { }
+local writable  = nil
+local readables = { }
+local usingjit  = jit
 
 if not caches.namespace or caches.namespace == "" or caches.namespace == "context" then
     caches.namespace = 'generic'
@@ -193,7 +206,7 @@ end
 local function makefullname(path,name)
     if path and path ~= "" then
         name = "temp-" .. name -- clash prevention
-        return file.addsuffix(file.join(path,name),"lua"), file.addsuffix(file.join(path,name),"luc")
+        return file.addsuffix(file.join(path,name),"lua"), file.addsuffix(file.join(path,name),usingjit and "lub" or "luc")
     end
 end
 
@@ -206,15 +219,28 @@ function caches.loaddata(paths,name)
     for i=1,#paths do
         local data = false
         local luaname, lucname = makefullname(paths[i],name)
-        if lucname and lfs.isfile(lucname) then
-            texio.write(string.format("(load: %s)",lucname))
+        if lucname and lfs.isfile(lucname) then -- maybe also check for size
+            texio.write(string.format("(load luc: %s)",lucname))
             data = loadfile(lucname)
+            if data then
+                data = data()
+            end
+            if data then
+                return data
+            else
+                texio.write(string.format("(loading failed: %s)",lucname))
+            end
         end
-        if not data and luaname and lfs.isfile(luaname) then
-            texio.write(string.format("(load: %s)",luaname))
+        if luaname and lfs.isfile(luaname) then
+            texio.write(string.format("(load lua: %s)",luaname))
             data = loadfile(luaname)
+            if data then
+                data = data()
+            end
+            if data then
+                return data
+            end
         end
-        return data and data()
     end
 end
 
@@ -241,23 +267,36 @@ end
 -- this) in which case one should limit the method to luac and enable support
 -- for execution.
 
-caches.compilemethod = "luac" -- luac dump both
+-- function caches.compile(data,luaname,lucname)
+--     local d = io.loaddata(luaname)
+--     if not d or d == "" then
+--         d = table.serialize(data,true) -- slow
+--     end
+--     if d and d ~= "" then
+--         local f = io.open(lucname,'w')
+--         if f then
+--             local s = loadstring(d)
+--             if s then
+--                 f:write(string.dump(s,true))
+--             end
+--             f:close()
+--         end
+--     end
+-- end
 
 function caches.compile(data,luaname,lucname)
-    local done = false
-    if caches.compilemethod == "luac" or caches.compilemethod == "both" then
-        local command = "-o " .. string.quoted(lucname) .. " -s " .. string.quoted(luaname)
-        done = os.spawn("texluac " .. command) == 0
+    local d = io.loaddata(luaname)
+    if not d or d == "" then
+        d = table.serialize(data,true) -- slow
     end
-    if not done and (caches.compilemethod == "dump" or caches.compilemethod == "both") then
-        local d = table.serialize(data,true)
-        if d and d ~= "" then
-            local f = io.open(lucname,'w')
-            if f then
-                local s = loadstring(d)
-                f:write(string.dump(s))
-                f:close()
+    if d and d ~= "" then
+        local f = io.open(lucname,'w')
+        if f then
+            local s = loadstring(d)
+            if s then
+                f:write(string.dump(s,true))
             end
+            f:close()
         end
     end
 end
